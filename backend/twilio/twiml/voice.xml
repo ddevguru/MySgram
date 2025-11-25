@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <!-- Basic voice call TwiML -->
+    <Say voice="alice">Hello! You have received a call from MySgram.</Say>
+    <Pause length="1"/>
+    <Say voice="alice">Press any key to connect to the caller.</Say>
+    <Gather numDigits="1" action="/twilio/connect_call.php" method="POST">
+        <Say voice="alice">Please press any key to connect.</Say>
+    </Gather>
+    
+    <!-- If no input is received, hang up -->
+    <Say voice="alice">No input received. Goodbye!</Say>
+    <Hangup/>
+</Response> 

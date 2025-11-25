@@ -1,0 +1,43 @@
+name: mysgram
+description: A social media app built with Flutter
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  get: ^4.7.3
+  http: ^1.1.0
+  shared_preferences: ^2.2.2
+  image_picker: ^1.0.4
+  cached_network_image: ^3.3.0
+  video_player: ^2.8.1
+  permission_handler: ^11.0.1
+  path_provider: ^2.1.1
+  dio: ^5.3.2
+  flutter_local_notifications: ^17.2.3
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.10
+  flutter_stripe: ^9.5.0
+  url_launcher: ^6.2.1
+  webview_flutter: ^4.4.2
+  flutter_webview_pro: ^3.0.0+4
+  share_plus: ^11.1.0
+  razorpay_flutter: ^1.4.0
+  google_sign_in: ^6.2.1  
+  firebase_auth: ^4.16.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/

@@ -1,0 +1,38 @@
+{
+  "project_info": {
+    "project_number": "1028002440504",
+    "project_id": "mysgram-4a183",
+    "storage_bucket": "mysgram-4a183.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1028002440504:android:c96a8ae04908e5dfbd8dcd",
+        "android_client_info": {
+          "package_name": "com.codify.mysgram"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1028002440504-728rfappe0p97dn0vqlljhh4btsd3bko.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.codify.mysgram",
+            "certificate_hash": "116943a01f892480cd1be7a90b3d80ca99ccaa15"
+          }
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8kktMBUOVr4hndATvp8IIv743YBeekZQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
