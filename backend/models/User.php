@@ -208,6 +208,18 @@ class User {
 
         if($stmt->rowCount() > 0) {
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Update counts before returning (only update, don't fetch again)
+            $this->id = $row['id'];
+            $this->updateCounts();
+            
+            // Fetch updated counts
+            $countsQuery = "SELECT followers_count, following_count, posts_count, streak_count FROM " . $this->table_name . " WHERE id = ?";
+            $countsStmt = $this->conn->prepare($countsQuery);
+            $countsStmt->bindParam(1, $id);
+            $countsStmt->execute();
+            $countsRow = $countsStmt->fetch(PDO::FETCH_ASSOC);
+            
             return array(
                 'id' => $row['id'],
                 'username' => $row['username'],
@@ -220,9 +232,10 @@ class User {
                 'phone' => $row['phone'],
                 'gender' => $row['gender'],
                 'date_of_birth' => $row['date_of_birth'],
-                'followers_count' => $row['followers_count'],
-                'following_count' => $row['following_count'],
-                'posts_count' => $row['posts_count'],
+                'followers_count' => (int)($countsRow['followers_count'] ?? $row['followers_count'] ?? 0),
+                'following_count' => (int)($countsRow['following_count'] ?? $row['following_count'] ?? 0),
+                'posts_count' => (int)($countsRow['posts_count'] ?? $row['posts_count'] ?? 0),
+                'streak_count' => (int)($countsRow['streak_count'] ?? $row['streak_count'] ?? 0),
                 'is_private' => $row['is_private'],
                 'is_verified' => $row['is_verified'],
                 'auth_provider' => $row['auth_provider'],

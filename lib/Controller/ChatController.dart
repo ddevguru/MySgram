@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import '../../services/php_chat_service.dart'; // This contains ChatMessage and MessageType
 import '../../services/gift_service_simple.dart';
 import '../../services/auth_service.dart';
-import 'package:collection/collection.dart';
+import '../../services/razorpay_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatController extends GetxController {
@@ -47,6 +47,11 @@ class ChatController extends GetxController {
         }
         loadUserCoins(); // Refresh coins after purchase
       });
+      
+      // Register callback for coin updates from payment
+      RazorpayService.onCoinsUpdated = () {
+        loadUserCoins();
+      };
     } catch (e) {
       print('❌ Error initializing chat: $e');
     }
@@ -125,13 +130,12 @@ class ChatController extends GetxController {
   // Follow or unfollow user
   Future<void> toggleFollow(String targetUserId, String action) async {
     try {
-      print('🔍 Toggling follow: $action for user: $targetUserId');
+     
       
       final success = await PHPChatService.toggleFollow(targetUserId, action);
       
       if (success) {
-        print('✅ Follow action successful, refreshing data...');
-        
+     
         // Refresh follow users list
         await loadFollowUsers();
         
@@ -214,15 +218,30 @@ class ChatController extends GetxController {
     
     try {
       // Get recipient ID from current room
-      final recipientId = currentRoom.value!.participants.firstWhere(
-        (id) => id != 'current_user', // This should be the actual user ID
-        orElse: () => '',
-      );
+      String recipientId = '';
+      
+      // Try to get recipient from participants
+      for (var participantId in currentRoom.value!.participants) {
+        if (participantId != currentUserId.value && participantId != 'current_user') {
+          recipientId = participantId;
+          break;
+        }
+      }
+      
+      // If not found in participants, try to get from otherUser
+      if (recipientId.isEmpty && currentRoom.value!.otherUser != null) {
+        recipientId = currentRoom.value!.otherUser!['id']?.toString() ?? 
+                     currentRoom.value!.otherUser!['user_id']?.toString() ?? '';
+      }
       
       if (recipientId.isEmpty) {
+        print('❌ Unable to identify recipient. Participants: ${currentRoom.value!.participants}');
+        print('❌ Current user ID: ${currentUserId.value}');
         Get.snackbar('Error', 'Unable to identify recipient');
         return;
       }
+      
+      print('🎁 Sending gift $giftId to recipient: $recipientId');
       
       final success = await GiftService.sendGift(recipientId, giftId, quantity: quantity);
       
@@ -235,7 +254,7 @@ class ChatController extends GetxController {
           final giftMessage = ChatMessage(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             roomId: currentRoom.value!.id,
-            senderId: 'current_user',
+            senderId: currentUserId.value,
             message: 'Sent ${giftItem.icon} ${giftItem.name}',
             timestamp: DateTime.now(),
             type: MessageType.gift,
@@ -251,8 +270,11 @@ class ChatController extends GetxController {
         
         // Refresh user coins
         await loadUserCoins();
+        
+        // Reload messages to show the gift in chat
+        await loadMessages(currentRoom.value!.id);
       } else {
-        Get.snackbar('Error', 'Failed to send gift');
+        // Error message is already shown by GiftService
       }
     } catch (e) {
       print('❌ Error sending gift: $e');
@@ -267,7 +289,8 @@ class ChatController extends GetxController {
           return gift;
         }
       }
-  }
+    }
+    return null;
   }
   
   Future<void> startVoiceCall(String phoneNumber) async {
@@ -414,6 +437,8 @@ class ChatController extends GetxController {
   
   @override
   void onClose() {
+    // Unregister callback
+    RazorpayService.onCoinsUpdated = null;
     PHPChatService.dispose();
     super.onClose();
   }

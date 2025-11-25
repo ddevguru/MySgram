@@ -4,10 +4,12 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:get/get.dart';
+import 'gift_service_simple.dart';
 
 class RazorpayService {
   static Razorpay? _razorpay;
   static bool _isInitialized = false;
+  static Function()? onCoinsUpdated;
   
   // Razorpay configuration - PRODUCTION KEYS
   static const String _keyId = 'rzp_live_Nb4qh9syPEKkss'; // Your production key
@@ -82,15 +84,19 @@ class RazorpayService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          final coinsAdded = data['coins_added'] ?? 0;
+          final totalCoins = data['total_coins'] ?? 0;
+          
           Get.snackbar(
             'Payment Successful! 🎉',
-            'Coins added to your wallet successfully!',
+            '$coinsAdded coins added! Total: $totalCoins coins',
             backgroundColor: Colors.green,
             colorText: Colors.white,
+            duration: Duration(seconds: 3),
           );
           
-          // Refresh user coins
-          // You can add a callback here to refresh the UI
+          // Refresh user coins in all places
+          await _refreshUserCoins();
         } else {
           Get.snackbar(
             'Payment Verification Failed',
@@ -101,6 +107,12 @@ class RazorpayService {
         }
       } else {
         print('❌ Payment verification failed: ${response.statusCode}');
+        Get.snackbar(
+          'Payment Verification Failed',
+          'Could not verify payment. Please contact support.',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+        );
       }
     } catch (e) {
       print('❌ Error verifying payment: $e');
@@ -190,6 +202,25 @@ class RazorpayService {
     } catch (e) {
       print('❌ Error creating order: $e');
       return null;
+    }
+  }
+  
+  // Refresh user coins after payment
+  static Future<void> _refreshUserCoins() async {
+    try {
+      // Refresh coins in GiftService
+      final coins = await GiftService.getUserCoins();
+      print('✅ Coins refreshed: $coins');
+      
+      // Call callback if registered
+      if (onCoinsUpdated != null) {
+        onCoinsUpdated!();
+      }
+      
+      // Force app update to refresh all pages
+      Get.forceAppUpdate();
+    } catch (e) {
+      print('❌ Error refreshing user coins: $e');
     }
   }
   

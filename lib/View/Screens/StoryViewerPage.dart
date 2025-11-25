@@ -26,6 +26,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
   late AnimationController _progressController;
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
+  bool _isMuted = false;
   int _currentUserIndex = 0;
   int _currentStoryIndex = 0;
   Set<int> _viewedStories = {};
@@ -137,14 +138,26 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
       
       final currentStory = widget.stories[_currentUserIndex];
       print('🔍 Current story data: $currentStory');
-      print('🔍 Media URL: ${currentStory['media_url']}');
-      print('🔍 Media type: ${currentStory['media_type']}');
       
-      if (currentStory['media_type'] == 'video') {
-        print('🔍 Creating video controller for URL: ${currentStory['media_url']}');
+      // Handle nested story structure (stories array within userStories)
+      Map<String, dynamic> storyData;
+      if (currentStory.containsKey('stories') && (currentStory['stories'] as List).isNotEmpty) {
+        storyData = (currentStory['stories'] as List)[_currentStoryIndex];
+      } else {
+        storyData = currentStory;
+      }
+      
+      final mediaUrl = storyData['media_url'] ?? '';
+      final mediaType = storyData['media_type'] ?? 'image';
+      
+      print('🔍 Media URL: $mediaUrl');
+      print('🔍 Media type: $mediaType');
+      
+      if (mediaType == 'video' && mediaUrl.isNotEmpty && mediaUrl.startsWith('http')) {
+        print('🔍 Creating video controller for URL: $mediaUrl');
         
         // Create video controller
-        _videoController = VideoPlayerController.network(currentStory['media_url']);
+        _videoController = VideoPlayerController.network(mediaUrl);
         
         // Add error listener
         _videoController!.addListener(() {
@@ -164,8 +177,9 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
               _isVideoInitialized = true;
             });
             
-            // Force play the video
+            // Force play the video with auto-play
             print('🔍 Starting video playback...');
+            _videoController!.setVolume(_isMuted ? 0.0 : 1.0);
             _videoController!.play();
             _videoController!.setLooping(true);
             
@@ -188,7 +202,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
         });
       } else {
         print('🔍 Not a video story, skipping video initialization');
-        print('🔍 Media type was: ${currentStory['media_type']}');
+        print('🔍 Media type was: $mediaType');
       }
     } catch (e) {
       print('❌ Error in _initializeVideo: $e');
@@ -206,7 +220,16 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
       }
       
       final currentStory = widget.stories[_currentUserIndex];
-      final storyId = int.tryParse(currentStory['id'].toString());
+      
+      // Handle nested story structure
+      Map<String, dynamic> storyData;
+      if (currentStory.containsKey('stories') && (currentStory['stories'] as List).isNotEmpty) {
+        storyData = (currentStory['stories'] as List)[_currentStoryIndex];
+      } else {
+        storyData = currentStory;
+      }
+      
+      final storyId = int.tryParse(storyData['id'].toString());
       
       if (storyId != null && !_viewedStories.contains(storyId)) {
         _viewedStories.add(storyId);
@@ -227,7 +250,16 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
       }
       
       final currentStory = widget.stories[_currentUserIndex];
-      final storyId = int.tryParse(currentStory['id'].toString());
+      
+      // Handle nested story structure
+      Map<String, dynamic> storyData;
+      if (currentStory.containsKey('stories') && (currentStory['stories'] as List).isNotEmpty) {
+        storyData = (currentStory['stories'] as List)[_currentStoryIndex];
+      } else {
+        storyData = currentStory;
+      }
+      
+      final storyId = int.tryParse(storyData['id'].toString());
       
       if (storyId != null) {
         AuthService.getStoryViews(storyId).then((result) {
@@ -271,7 +303,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
                                     ),
                                   ),
                                   Text(
-                                    'Story posted ${_getTimeAgo(currentStory['created_at'])}',
+                                    'Story posted ${_getTimeAgo(storyData['created_at'])}',
                                     style: TextStyle(
                                       color: Colors.blue.shade600,
                                       fontSize: 12,
@@ -466,7 +498,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
     
     // Check if URL is valid
     final mediaUrl = story['media_url'] ?? '';
-    if (mediaUrl.isEmpty || mediaUrl.contains('mysgram.com')) {
+    if (mediaUrl.isEmpty || !mediaUrl.startsWith('http')) {
       // Show placeholder for invalid URLs
       return Container(
         width: double.infinity,
@@ -660,65 +692,81 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
     }
 
     print('✅ Building video player widget');
-    return GestureDetector(
-      onTap: () {
-        if (_videoController != null && _isVideoInitialized) {
-          if (_videoController!.value.isPlaying) {
-            print('🔍 Pausing video');
-            _videoController!.pause();
-          } else {
-            print('🔍 Playing video');
-            _videoController!.play();
-          }
-        }
-      },
-      child: Stack(
-        children: [
-          // Video player
-          Center(
-            child: AspectRatio(
-              aspectRatio: _videoController!.value.aspectRatio,
-              child: VideoPlayer(_videoController!),
+    return Stack(
+      children: [
+        // Video player
+        Center(
+          child: AspectRatio(
+            aspectRatio: _videoController!.value.aspectRatio,
+            child: VideoPlayer(_videoController!),
+          ),
+        ),
+        // Mute/Unmute button
+        Positioned(
+          bottom: 100,
+          right: 16,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _isMuted = !_isMuted;
+                _videoController!.setVolume(_isMuted ? 0.0 : 1.0);
+              });
+            },
+            child: Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isMuted ? Icons.volume_off : Icons.volume_up,
+                color: Colors.white,
+                size: 24,
+              ),
             ),
           ),
-          // Auto-play indicator (temporary)
-          if (!_videoController!.value.isPlaying)
-            Center(
+        ),
+        // Play/Pause indicator
+        if (!_videoController!.value.isPlaying)
+          Center(
+            child: GestureDetector(
+              onTap: () {
+                if (_videoController != null && _isVideoInitialized) {
+                  _videoController!.play();
+                }
+              },
               child: Container(
                 padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.7),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.play_arrow,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Tap to play',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+                child: Icon(
+                  Icons.play_arrow,
+                  color: Colors.white,
+                  size: 48,
                 ),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
+  }
+
+  Map<String, dynamic> _getStoryData(Map<String, dynamic> story) {
+    // Handle nested story structure (stories array within userStories)
+    if (story.containsKey('stories') && (story['stories'] as List).isNotEmpty) {
+      return (story['stories'] as List)[_currentStoryIndex];
+    } else {
+      return story;
+    }
   }
 
   Widget _buildUserStories(Map<String, dynamic> userStories, int userIndex) {
     try {
       // Since we're passing individual stories, not grouped stories
       final currentStory = userStories;
+      final storyData = _getStoryData(currentStory);
       
       return GestureDetector(
         onTapDown: (details) {
@@ -761,9 +809,9 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
             Container(
               width: double.infinity,
               height: double.infinity,
-              child: currentStory['media_type'] == 'video'
-                  ? _buildVideoStory(currentStory)
-                  : _buildImageStory(currentStory),
+              child: storyData['media_type'] == 'video'
+                  ? _buildVideoStory(storyData)
+                  : _buildImageStory(storyData),
             ),
 
             // Progress bar
@@ -797,9 +845,15 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
                       children: [
                         CircleAvatar(
                           radius: 20,
-                          backgroundImage: CachedNetworkImageProvider(
-                            currentStory['profile_picture'] ?? '',
-                          ),
+                          backgroundImage: (storyData['profile_picture'] ?? currentStory['profile_picture'] ?? '').toString().isNotEmpty
+                              ? CachedNetworkImageProvider(
+                                  storyData['profile_picture'] ?? currentStory['profile_picture'] ?? '',
+                                )
+                              : null,
+                          backgroundColor: Colors.grey.shade300,
+                          child: (storyData['profile_picture'] ?? currentStory['profile_picture'] ?? '').toString().isEmpty
+                              ? Icon(Icons.person, color: Colors.white)
+                              : null,
                         ),
                         SizedBox(width: 12),
                         Expanded(
@@ -807,7 +861,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                currentStory['username'] ?? '',
+                                storyData['username'] ?? currentStory['username'] ?? '',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,
@@ -815,7 +869,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
                                 ),
                               ),
                               Text(
-                                _getTimeAgo(currentStory['created_at']),
+                                _getTimeAgo(storyData['created_at'] ?? currentStory['created_at']),
                                 style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 12,
@@ -837,7 +891,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
             ),
 
             // Caption
-            if (currentStory['caption'] != null && currentStory['caption'].toString().isNotEmpty)
+            if (storyData['caption'] != null && storyData['caption'].toString().isNotEmpty)
               Positioned(
                 bottom: 100,
                 left: 16,
@@ -849,7 +903,7 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    currentStory['caption'],
+                    storyData['caption'],
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -1015,6 +1069,10 @@ class _StoryViewerPageState extends State<StoryViewerPage> with TickerProviderSt
           });
           _resetProgress();
           _markCurrentStoryAsViewed();
+          // Dispose previous video before initializing new one
+          _videoController?.dispose();
+          _videoController = null;
+          _isVideoInitialized = false;
           _initializeVideo();
         },
         itemCount: widget.stories.length,

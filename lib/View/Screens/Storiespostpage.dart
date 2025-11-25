@@ -13,6 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mysgram/services/auth_service.dart';
 import 'package:mysgram/services/notification_service.dart';
 import 'package:mysgram/View/Screens/UserProfilePage.dart';
+import 'package:mysgram/Utils/media_utils.dart';
 import 'dart:io';
 import 'dart:ui';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -536,10 +537,6 @@ class _StoriespostpageState extends State<Storiespostpage> with WidgetsBindingOb
                                           ),
                                         ),
                                 ),
-                                Icon(
-                                  Icons.more_horiz,
-                                  size: 20,
-                                ),
                               ],
                             ),
                           ),
@@ -618,7 +615,23 @@ class _StoriespostpageState extends State<Storiespostpage> with WidgetsBindingOb
                                   child: Icon(Icons.send, size: 26),
                                 ),
                                 Spacer(),
-                                Icon(Icons.bookmark_border, size: 26),
+                                GestureDetector(
+                                  onTap: () {
+                                    // Toggle bookmark state
+                                    setState(() {
+                                      // For now, just show a snackbar
+                                      // TODO: Implement actual bookmark API call
+                                      Get.snackbar(
+                                        'Bookmark',
+                                        'Post saved to your collection',
+                                        backgroundColor: Colors.blue,
+                                        colorText: Colors.white,
+                                        duration: Duration(seconds: 1),
+                                      );
+                                    });
+                                  },
+                                  child: Icon(Icons.bookmark_border, size: 26),
+                                ),
                               ],
                             ),
                           ),
@@ -760,102 +773,26 @@ class _StoriespostpageState extends State<Storiespostpage> with WidgetsBindingOb
   }
 
   Widget _buildMediaContent(String url) {
-    // Check if URL contains video file extensions
-    final lowerUrl = url.toLowerCase();
-    final isVideo = lowerUrl.contains('.mp4') || lowerUrl.contains('.mov') || 
-                    lowerUrl.contains('.avi') || lowerUrl.contains('.wmv') || 
-                    lowerUrl.contains('.flv') || lowerUrl.contains('.webm');
-
-    if (isVideo) {
-      // For video files, show a video placeholder with play icon
-      return Container(
-        width: double.infinity,
-        height: MediaQuery.of(context).size.width,
-        color: Colors.black,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.play_circle_outline,
-                size: 80,
-                color: Colors.white,
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Video Content',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Tap to play',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      // For images, use CachedNetworkImage
-      return CachedNetworkImage(
-        imageUrl: url,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: MediaQuery.of(context).size.width,
-        placeholder: (context, url) => Container(
+    // Use MediaUtils for proper video auto-play support
+    // Constrain height to match image posts (square aspect ratio)
+    final screenWidth = MediaQuery.of(context).size.width;
+    return SizedBox(
+      width: double.infinity,
+      height: screenWidth, // Square aspect ratio like images - fixed height
+      child: ClipRect(
+        child: MediaUtils.buildMediaWidget(
+          url: url,
           width: double.infinity,
-          height: MediaQuery.of(context).size.width,
-          color: Colors.grey.shade200,
-          child: Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE9497E)),
-            ),
-          ),
+          height: screenWidth, // Constrain to square
+          fit: BoxFit.cover,
+          autoPlay: true, // Enable auto-play for videos
+          onTap: () {
+            // Optional: Navigate to full screen video player if needed
+            print('🔍 Media tapped: $url');
+          },
         ),
-        errorWidget: (context, url, error) {
-          print('❌ Error loading image: $url - $error');
-          return Container(
-            width: double.infinity,
-            height: MediaQuery.of(context).size.width,
-            color: Colors.grey.shade200,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error,
-                    size: 50,
-                    color: Colors.grey.shade400,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Failed to load media',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  if (isVideo)
-                    Text(
-                      'Video file detected',
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 12,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    }
+      ),
+    );
   }
 
   void _showLikeAnimation(BuildContext context) {
@@ -1326,23 +1263,58 @@ class _StoriespostpageState extends State<Storiespostpage> with WidgetsBindingOb
           );
         }
         
-        if (result['success'] == true) {
+        // Check if comment was successfully added
+        if (result['success'] == true || result.containsKey('comment')) {
+          // Clear text field immediately - use Future.microtask to ensure it happens after state update
+          Future.microtask(() {
+            commentController.clear();
+            replyingToCommentId.value = -1;
+          });
+          
+          // Also clear immediately
           commentController.clear();
           replyingToCommentId.value = -1;
-          // Reload comments
+          
+          // Show success message
+          Get.snackbar(
+            'Success',
+            'Comment added successfully',
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+            duration: Duration(seconds: 2),
+          );
+          
+          // Reload comments to show the new comment
           await loadComments();
           // Update post comment count
           final controller = Get.find<StoriesController>();
           await controller.refreshFeed();
+        } else {
+          // Only show error if comment was not actually added
+          Get.snackbar(
+            'Error',
+            'Failed to add comment',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
         }
       } catch (e) {
         print('❌ Error adding comment: $e');
-        Get.snackbar(
-          'Error',
-          'Failed to add comment',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
+        // Check if comment might have been added despite the error
+        // (e.g., network error after successful server response)
+        final errorMessage = e.toString().toLowerCase();
+        if (!errorMessage.contains('failed to add comment') && 
+            !errorMessage.contains('network error')) {
+          Get.snackbar(
+            'Error',
+            'Failed to add comment: ${e.toString()}',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+        } else {
+          // Reload comments anyway to check if comment was added
+          await loadComments();
+        }
       }
     }
 
@@ -1785,20 +1757,50 @@ class _StoriespostpageState extends State<Storiespostpage> with WidgetsBindingOb
 
   String _getTimeAgo(String dateString) {
     try {
-      final date = DateTime.parse(dateString);
+      if (dateString.isEmpty) return 'now';
+      
+      // Parse the date string - handle both UTC and local time
+      DateTime date;
+      if (dateString.endsWith('Z') || dateString.contains('+') || dateString.contains('-', 10)) {
+        // Has timezone info, parse as UTC and convert to local
+        date = DateTime.parse(dateString).toLocal();
+      } else {
+        // No timezone info, assume it's already in local time or parse as local
+        date = DateTime.parse(dateString);
+        // If parsed date seems to be in UTC (more than 5 hours difference), convert to local
+        final now = DateTime.now();
+        final testDiff = now.difference(date);
+        if (testDiff.inHours.abs() > 5 && testDiff.isNegative == false) {
+          // Likely UTC, try to convert
+          try {
+            date = DateTime.parse(dateString + 'Z').toLocal();
+          } catch (e) {
+            // Keep original if conversion fails
+          }
+        }
+      }
+      
       final now = DateTime.now();
       final difference = now.difference(date);
       
+      // Handle negative differences (future timestamps) - show as "now"
+      if (difference.isNegative) {
+        return 'now';
+      }
+      
       if (difference.inDays > 0) {
-        return '${difference.inDays}d';
+        return '${difference.inDays}d ago';
       } else if (difference.inHours > 0) {
-        return '${difference.inHours}h';
+        return '${difference.inHours}h ago';
       } else if (difference.inMinutes > 0) {
-        return '${difference.inMinutes}m';
+        return '${difference.inMinutes}m ago';
+      } else if (difference.inSeconds > 10) {
+        return '${difference.inSeconds}s ago';
       } else {
         return 'now';
       }
     } catch (e) {
+      print('❌ Error parsing time: $dateString - $e');
       return 'now';
     }
   }

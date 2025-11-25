@@ -6,7 +6,6 @@ import 'package:mysgram/services/auth_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mysgram/View/Screens/PostDetailPage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'FollowersFollowingPage.dart';
 
@@ -36,11 +35,14 @@ class ProfileController extends GetxController {
   final RxList<String> stories = <String>[].obs;
   final RxBool hasStories = false.obs;
 
-  final RxList<String> highlights = [
-    'New',
-  ].obs;
-
   final RxList<Map<String, dynamic>> posts = <Map<String, dynamic>>[].obs;
+  
+  // Text editing controllers for edit profile dialog
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController usernameController = TextEditingController();
+  final TextEditingController bioController = TextEditingController();
+  final TextEditingController websiteController = TextEditingController();
+  final TextEditingController locationController = TextEditingController();
 
   @override
   void onInit() {
@@ -122,30 +124,32 @@ class ProfileController extends GetxController {
         // Update posts count from actual posts loaded
         postsCount.value = posts.length;
         
+        // Force refresh counts from backend one more time
+        await refreshUserData();
+        
         // Test streak display
         try {
           final testResult = await AuthService.testStreakDisplay();
-          print('🔍 Test Streak Result: $testResult');
+          // print('🔍 Test Streak Result: $testResult');
           
           if (testResult['streak_raw'] != null) {
-            print('🔍 Raw Streak: ${testResult['streak_raw']}');
-            print('🔍 Int Streak: ${testResult['streak_int']}');
-            print('🔍 String Streak: ${testResult['streak_string']}');
-            print('🔍 Streak Type: ${testResult['streak_type']}');
+            // print('🔍 Raw Streak: ${testResult['streak_raw']}');
+            // print('🔍 Int Streak: ${testResult['streak_int']}');
+            // print('🔍 String Streak: ${testResult['streak_string']}');
+            // print('🔍 Streak Type: ${testResult['streak_type']}');
             
             // Update streak from test data
             streakCount.value = testResult['streak_int'];
-            print('🔍 Updated Streak from Test: ${testResult['streak_int']}');
+            // print('🔍 Updated Streak from Test: ${testResult['streak_int']}');
           }
         } catch (e) {
-          print('⚠️ Test streak failed: $e');
+          // print('⚠️ Test streak failed: $e');
         }
         
         // Debug profile data
         try {
           final debugResult = await AuthService.debugProfile();
-          print('🔍 Debug Result: $debugResult');
-          
+         
           if (debugResult['user_data'] != null) {
             final debugUserData = debugResult['user_data'];
             print('🔍 Database Streak: ${debugUserData['streak_count']}');
@@ -207,6 +211,7 @@ class ProfileController extends GetxController {
 
   Future<void> refreshUserData() async {
     try {
+      // Force refresh from backend
       final result = await AuthService.verifyToken();
       if (result != null && result['user'] != null) {
         final userData = result['user'];
@@ -219,12 +224,29 @@ class ProfileController extends GetxController {
         link.value = userData['website'] ?? '';
         location.value = userData['location'] ?? 'Add location';
         
-        // Handle type conversion for numeric fields
+        // Handle type conversion for numeric fields - ensure proper conversion
         try {
-          postsCount.value = int.tryParse(userData['posts_count']?.toString() ?? '0') ?? 0;
-          followersCount.value = (int.tryParse(userData['followers_count']?.toString() ?? '0') ?? 0).toString();
-          followingCount.value = int.tryParse(userData['following_count']?.toString() ?? '0') ?? 0;
-          streakCount.value = int.tryParse(userData['streak_count']?.toString() ?? '0') ?? 0;
+          // Get actual counts from database - ensure they are integers
+          final posts = userData['posts_count'];
+          postsCount.value = posts != null ? (int.tryParse(posts.toString()) ?? 0) : 0;
+          
+          // Ensure followers_count is properly converted
+          final followers = userData['followers_count'];
+          if (followers != null) {
+            final followersInt = int.tryParse(followers.toString()) ?? 0;
+            followersCount.value = followersInt.toString();
+          } else {
+            followersCount.value = '0';
+          }
+          
+          final following = userData['following_count'];
+          followingCount.value = following != null ? (int.tryParse(following.toString()) ?? 0) : 0;
+          
+          final streak = userData['streak_count'];
+          streakCount.value = streak != null ? (int.tryParse(streak.toString()) ?? 0) : 0;
+          
+          print('📊 Counts updated - Posts: ${postsCount.value}, Followers: ${followersCount.value}, Following: ${followingCount.value}, Streak: ${streakCount.value}');
+          print('📊 Raw data - Posts: ${userData['posts_count']}, Followers: ${userData['followers_count']}, Following: ${userData['following_count']}, Streak: ${userData['streak_count']}');
         } catch (e) {
           print('Error parsing numeric fields: $e');
           postsCount.value = 0;
@@ -236,11 +258,16 @@ class ProfileController extends GetxController {
         // Save updated data using AuthService
         await AuthService.saveUserData(userData);
         
+        // Reload posts to update posts count
+        await loadUserPosts();
+        postsCount.value = posts.length;
+        
         // Check and update streak
         try {
           final streakResult = await AuthService.checkStreak();
           if (streakResult['current_streak'] != null) {
-            streakCount.value = streakResult['current_streak'];
+            streakCount.value = int.tryParse(streakResult['current_streak'].toString()) ?? 0;
+            print('🔥 Streak updated: ${streakCount.value}');
           }
         } catch (e) {
           print('⚠️ Streak check failed: $e');
@@ -261,6 +288,7 @@ class ProfileController extends GetxController {
       postsCount.value = 0;
       followersCount.value = '0';
       followingCount.value = 0;
+      streakCount.value = 0;
     }
   }
 
@@ -283,11 +311,28 @@ class ProfileController extends GetxController {
   }
 
   void toggleEdit() {
+    // Initialize controllers with current values
+    nameController.text = fullName.value;
+    usernameController.text = username.value;
+    bioController.text = bio.value;
+    websiteController.text = link.value;
+    locationController.text = location.value;
     showEditDialog.value = true;
   }
 
   void closeEditDialog() {
     showEditDialog.value = false;
+  }
+  
+  @override
+  void onClose() {
+    // Dispose controllers
+    nameController.dispose();
+    usernameController.dispose();
+    bioController.dispose();
+    websiteController.dispose();
+    locationController.dispose();
+    super.onClose();
   }
 
   void addStory() {
@@ -570,8 +615,15 @@ class ProfileController extends GetxController {
             )
           : Stack(
               children: [
-                SingleChildScrollView(
-                  child: Column(
+                RefreshIndicator(
+                  onRefresh: () async {
+                    controller.isLoading.value = true;
+                    await controller.loadUserProfile();
+                    controller.isLoading.value = false;
+                  },
+                  child: SingleChildScrollView(
+                    physics: AlwaysScrollableScrollPhysics(),
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Profile Header Section
@@ -797,178 +849,6 @@ class ProfileController extends GetxController {
 
                       SizedBox(height: 16),
 
-                      // Highlights Section
-                      Container(
-                        height: 100,
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: controller.highlights.length + 1, // +1 for "New" button
-                          itemBuilder: (context, index) {
-                            if (index == controller.highlights.length) {
-                              // "New" highlight button
-                              return Container(
-                                width: 70,
-                                margin: EdgeInsets.only(right: 12),
-                                child: Column(
-                                  children: [
-                                    Container(
-                                      width: 65,
-                                      height: 65,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.grey.shade400,
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: Icon(
-                                        Icons.add,
-                                        color: Colors.grey.shade600,
-                                        size: 30,
-                                      ),
-                                    ),
-                                    SizedBox(height: 6),
-                                    Text(
-                                      'New',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                            
-                            return Container(
-                              width: 70,
-                              margin: EdgeInsets.only(right: 12),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    width: 65,
-                                    height: 65,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.grey.shade400,
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Container(
-                                      margin: EdgeInsets.all(3),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.grey.shade300,
-                                      ),
-                                      child: Icon(
-                                        Icons.favorite,
-                                        color: Colors.grey.shade500,
-                                        size: 30,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(height: 6),
-                                  Text(
-                                    controller.highlights[index],
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-
-                      // Tab Bar
-                      Container(
-                        height: 44,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => controller.selectTab(0),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: controller.selectedTabIndex.value == 0
-                                            ? Colors.black
-                                            : Colors.transparent,
-                                        width: 1,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    Icons.grid_on,
-                                    color: controller.selectedTabIndex.value == 0
-                                        ? Colors.black
-                                        : Colors.grey.shade400,
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => controller.selectTab(1),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: controller.selectedTabIndex.value == 1
-                                            ? Colors.black
-                                            : Colors.transparent,
-                                        width: 1,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    Icons.assignment_ind_outlined,
-                                    color: controller.selectedTabIndex.value == 1
-                                        ? Colors.black
-                                        : Colors.grey.shade400,
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => controller.selectTab(2),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: controller.selectedTabIndex.value == 2
-                                            ? Colors.black
-                                            : Colors.transparent,
-                                        width: 1,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    Icons.person_outline,
-                                    color: controller.selectedTabIndex.value == 2
-                                        ? Colors.black
-                                        : Colors.grey.shade400,
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
                       // Posts Grid
                       controller.posts.isEmpty
                           ? Container(
@@ -1049,63 +929,21 @@ class ProfileController extends GetxController {
                                       initialIndex: index,
                                     ));
                                   },
-                                  onLongPressStart: (details) {
-                                    controller.expandPost(index);
-                                  },
-                                  onLongPressEnd: (details) {
-                                    controller.collapsePost();
-                                  },
-                                  onLongPressCancel: () {
-                                    controller.collapsePost();
+                                  onLongPress: () {
+                                    // Show delete option for own posts
+                                    _showDeletePostDialog(controller, index);
                                   },
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: Colors.grey.shade200,
                                     ),
-                                                                      child: controller.posts[index]['media_type'] == 'image'
-                                      ? Image.network(
-                                          controller.posts[index]['media_url'],
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (context, error, stackTrace) {
-                                            return Container(
-                                              color: Colors.grey.shade300,
-                                              child: Icon(
-                                                Icons.image,
-                                                color: Colors.grey.shade500,
-                                                size: 40,
-                                              ),
-                                            );
-                                          },
-                                        )
-                                      : Stack(
-                                          alignment: Alignment.center,
-                                          children: [
-                                            Image.network(
-                                              controller.posts[index]['thumbnail_url'] ?? controller.posts[index]['media_url'],
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (context, error, stackTrace) {
-                                                return Container(
-                                                  color: Colors.grey.shade300,
-                                                  child: Icon(
-                                                    Icons.image,
-                                                    color: Colors.grey.shade500,
-                                                    size: 40,
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                            Icon(
-                                              Icons.play_circle_outline,
-                                              color: Colors.white,
-                                              size: 32,
-                                            ),
-                                          ],
-                                        ),
+                                    child: _buildPostThumbnail(controller.posts[index]),
                                   ),
                                 );
                               },
                             ),
                     ],
+                  ),
                   ),
                 ),
 
@@ -1279,6 +1117,13 @@ class ProfileController extends GetxController {
                                             print('Website: ${controller.link.value}');
                                             print('Location: ${controller.location.value}');
                                             
+                                            // Update values from controllers
+                                            controller.fullName.value = controller.nameController.text;
+                                            controller.username.value = controller.usernameController.text;
+                                            controller.bio.value = controller.bioController.text;
+                                            controller.link.value = controller.websiteController.text;
+                                            controller.location.value = controller.locationController.text;
+                                            
                                             // Save profile changes to backend
                                             final result = await AuthService.updateProfile(
                                               username: controller.username.value,
@@ -1408,49 +1253,44 @@ class ProfileController extends GetxController {
                                         SizedBox(height: 24),
 
                                         // Edit Fields
-                                        _buildEditField(
+                                        _buildEditFieldWithController(
                                           label: 'Name',
-                                          value: controller.fullName.value,
+                                          controller: controller.nameController,
                                           onChanged: (value) {
                                             controller.fullName.value = value;
-                                            print('Name changed to: $value');
                                           },
                                         ),
                                         SizedBox(height: 16),
-                                        _buildEditField(
+                                        _buildEditFieldWithController(
                                           label: 'Username',
-                                          value: controller.username.value,
+                                          controller: controller.usernameController,
                                           onChanged: (value) {
                                             controller.username.value = value;
-                                            print('Username changed to: $value');
                                           },
                                         ),
                                         SizedBox(height: 16),
-                                        _buildEditField(
+                                        _buildEditFieldWithController(
                                           label: 'Bio',
-                                          value: controller.bio.value,
+                                          controller: controller.bioController,
                                           onChanged: (value) {
                                             controller.bio.value = value;
-                                            print('Bio changed to: $value');
                                           },
                                           maxLines: 3,
                                         ),
                                         SizedBox(height: 16),
-                                        _buildEditField(
+                                        _buildEditFieldWithController(
                                           label: 'Website',
-                                          value: controller.link.value,
+                                          controller: controller.websiteController,
                                           onChanged: (value) {
                                             controller.link.value = value;
-                                            print('Website changed to: $value');
                                           },
                                         ),
                                         SizedBox(height: 16),
-                                        _buildEditField(
+                                        _buildEditFieldWithController(
                                           label: 'Location',
-                                          value: controller.location.value,
+                                          controller: controller.locationController,
                                           onChanged: (value) {
                                             controller.location.value = value;
-                                            print('Location changed to: $value');
                                           },
                                         ),
                                       ],
@@ -1468,9 +1308,9 @@ class ProfileController extends GetxController {
     );
   }
 
-  Widget _buildEditField({
+  Widget _buildEditFieldWithController({
     required String label,
-    required String value,
+    required TextEditingController controller,
     required Function(String) onChanged,
     int maxLines = 1,
   }) {
@@ -1486,7 +1326,7 @@ class ProfileController extends GetxController {
         ),
         SizedBox(height: 8),
         TextField(
-          controller: TextEditingController(text: value),
+          controller: controller,
           onChanged: onChanged,
           maxLines: maxLines,
           textInputAction: TextInputAction.next,
@@ -1504,6 +1344,8 @@ class ProfileController extends GetxController {
               borderSide: BorderSide(color: Color(0xFF7D64FF)),
             ),
             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            filled: true,
+            fillColor: Colors.grey.shade50,
           ),
         ),
       ],
@@ -1571,6 +1413,123 @@ class ProfileController extends GetxController {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
+    }
+  }
+
+  // Build post thumbnail widget
+  Widget _buildPostThumbnail(Map<String, dynamic> post) {
+    final mediaType = post['media_type'] ?? 'image';
+    final mediaUrl = post['media_url'] ?? '';
+    final thumbnailUrl = post['thumbnail_url'] ?? '';
+    
+    // Only show video icon if it's actually a video
+    if (mediaType == 'video' || mediaType == 'reel') {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          Image.network(
+            thumbnailUrl.isNotEmpty ? thumbnailUrl : mediaUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey.shade300,
+                child: Icon(
+                  Icons.image,
+                  color: Colors.grey.shade500,
+                  size: 40,
+                ),
+              );
+            },
+          ),
+          Icon(
+            Icons.play_circle_outline,
+            color: Colors.white,
+            size: 32,
+          ),
+        ],
+      );
+    } else {
+      // Regular image post
+      return Image.network(
+        mediaUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: Colors.grey.shade300,
+            child: Icon(
+              Icons.image,
+              color: Colors.grey.shade500,
+              size: 40,
+            ),
+          );
+        },
+      );
+    }
+  }
+
+  // Show delete post dialog
+  Future<void> _showDeletePostDialog(ProfileController controller, int postIndex) async {
+    final post = controller.posts[postIndex];
+    
+    final result = await Get.dialog<bool>(
+      AlertDialog(
+        title: Text('Delete Post'),
+        content: Text('Are you sure you want to delete this post? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Get.back(result: true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      try {
+        // Show loading
+        Get.dialog(
+          Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF7D64FF)),
+            ),
+          ),
+          barrierDismissible: false,
+        );
+
+        // Delete post
+        await AuthService.deletePost(int.parse(post['id'].toString()));
+        
+        // Remove from list
+        controller.posts.removeAt(postIndex);
+        controller.postsCount.value = controller.posts.length;
+        
+        // Refresh user data to update counts
+        await controller.refreshUserData();
+        
+        Get.back(); // Close loading dialog
+        
+        Get.snackbar(
+          'Success',
+          'Post deleted successfully',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } catch (e) {
+        Get.back(); // Close loading dialog
+        Get.snackbar(
+          'Error',
+          'Failed to delete post: ${e.toString()}',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
     }
   }
 

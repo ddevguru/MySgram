@@ -20,6 +20,18 @@ class _WalletPageState extends State<WalletPage> {
   void initState() {
     super.initState();
     _loadUserCoins();
+    
+    // Register callback for coin updates
+    RazorpayService.onCoinsUpdated = () {
+      _loadUserCoins();
+    };
+  }
+  
+  @override
+  void dispose() {
+    // Unregister callback
+    RazorpayService.onCoinsUpdated = null;
+    super.dispose();
   }
 
   Future<void> _loadUserCoins() async {

@@ -5,7 +5,6 @@ import '../../Controller/ChatController.dart';
 import '../../services/php_chat_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/gift_service_simple.dart';
-import 'dart:convert';
 import 'WalletPage.dart';
 
 class ChatPage extends StatefulWidget {
@@ -628,15 +627,155 @@ class _ChatPageState extends State<ChatPage> {
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Send Gift'),
-        content: Text('Gift functionality coming soon!'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('OK'),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Send Gift 🎁',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF7D64FF),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              // User coins display
+              Obx(() => Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Color(0xFF7D64FF).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.account_balance_wallet, color: Color(0xFF7D64FF), size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Your Coins: ${chatController.userCoins.value}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF7D64FF),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+              SizedBox(height: 16),
+              // Gift categories
+              Expanded(
+                child: ListView.builder(
+                  itemCount: GiftService.giftCategories.length,
+                  itemBuilder: (context, categoryIndex) {
+                    final category = GiftService.giftCategories[categoryIndex];
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            '${category.icon} ${category.name}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: NeverScrollableScrollPhysics(),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                            childAspectRatio: 0.85,
+                          ),
+                          itemCount: category.gifts.length,
+                          itemBuilder: (context, giftIndex) {
+                            final gift = category.gifts[giftIndex];
+                            final canAfford = chatController.userCoins.value >= gift.coins;
+                            return GestureDetector(
+                              onTap: canAfford ? () => _sendGift(gift) : null,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: canAfford 
+                                    ? Colors.white 
+                                    : Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: canAfford 
+                                      ? Color(0xFF7D64FF) 
+                                      : Colors.grey.shade300,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      gift.icon,
+                                      style: TextStyle(fontSize: 32),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      gift.name,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    SizedBox(height: 4),
+                                    Container(
+                                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: canAfford 
+                                          ? Color(0xFF7D64FF).withOpacity(0.1)
+                                          : Colors.grey.shade300,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '${gift.coins} coins',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: canAfford 
+                                            ? Color(0xFF7D64FF)
+                                            : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        SizedBox(height: 16),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1370,16 +1509,32 @@ class _ChatPageState extends State<ChatPage> {
 
   
   String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final difference = now.difference(time);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m';
-    } else {
+    try {
+      // Ensure we're working with local time
+      final localTime = time.isUtc ? time.toLocal() : time;
+      final now = DateTime.now();
+      
+      // Calculate difference
+      final difference = now.difference(localTime);
+      
+      // Handle negative differences (future timestamps) - show as "now"
+      if (difference.isNegative) {
+        return 'now';
+      }
+      
+      if (difference.inDays > 0) {
+        return '${difference.inDays}d ago';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes}m ago';
+      } else if (difference.inSeconds > 10) {
+        return '${difference.inSeconds}s ago';
+      } else {
+        return 'now';
+      }
+    } catch (e) {
+      print('❌ Error formatting time: $e');
       return 'now';
     }
   }

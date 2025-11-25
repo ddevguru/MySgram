@@ -176,6 +176,7 @@ class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _hasError = false;
+  bool _isMuted = false;
 
   @override
   void initState() {
@@ -208,12 +209,14 @@ class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> {
           _isInitialized = true;
         });
         
-        // Auto-play if enabled
+        // Auto-play if enabled - muted by default for feed/explore pages
         if (widget.autoPlay) {
           await _controller!.play();
           _controller!.setLooping(true);
-          _controller!.setVolume(1.0);
-          print(' Auto-playing video: ${widget.url}');
+          // Start muted by default - user can unmute by clicking
+          _isMuted = true;
+          _controller!.setVolume(0.0);
+          print(' Auto-playing video (muted): ${widget.url}');
         }
       }
     } catch (e) {
@@ -249,16 +252,18 @@ class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> {
         height: widget.height,
         child: Stack(
           children: [
-            // Video player
+            // Video player - constrained to widget dimensions
             SizedBox(
               width: widget.width,
               height: widget.height,
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller!.value.size.width,
-                  height: _controller!.value.size.height,
-                  child: VideoPlayer(_controller!),
+              child: ClipRect(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _controller!.value.size.width,
+                    height: _controller!.value.size.height,
+                    child: VideoPlayer(_controller!),
+                  ),
                 ),
               ),
             ),
@@ -292,24 +297,52 @@ class _VideoPlayerWidgetState extends State<_VideoPlayerWidget> {
                   ),
                 ),
               ),
-            // Video indicator
+            // Video indicator and mute button
             Positioned(
               top: 8,
               right: 8,
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'VIDEO',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Mute/Unmute button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _isMuted = !_isMuted;
+                        _controller!.setVolume(_isMuted ? 0.0 : 1.0);
+                      });
+                    },
+                    child: Container(
+                      padding: EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _isMuted ? Icons.volume_off : Icons.volume_up,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
                   ),
-                ),
+                  SizedBox(width: 8),
+                  // Video indicator
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'VIDEO',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

@@ -63,7 +63,8 @@ try {
         throw new Exception('Access denied to this chat room');
     }
     
-    // Get messages
+    // Get messages - order by timestamp ASC (oldest first, newest last)
+    // This way oldest messages appear at top and newest at bottom in chat
     $stmt = $pdo->prepare("
         SELECT m.*, u.username, u.profile_picture, u.full_name
         FROM messages m
@@ -76,7 +77,7 @@ try {
     $stmt->execute([$roomId]);
     $messages = $stmt->fetchAll();
     
-    // Format messages
+    // Format messages - keep in ASC order (oldest first, newest last)
     $formattedMessages = [];
     foreach ($messages as $msg) {
         $formattedMessages[] = [
@@ -95,8 +96,7 @@ try {
         ];
     }
     
-    // Reverse to get chronological order
-    $formattedMessages = array_reverse($formattedMessages);
+    // Don't reverse - keep messages in chronological order (oldest first, newest last)
     
     echo json_encode([
         'success' => true,

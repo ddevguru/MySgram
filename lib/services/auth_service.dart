@@ -1333,6 +1333,43 @@ class AuthService {
     }
   }
 
+  // Delete post
+  static Future<Map<String, dynamic>> deletePost(int postId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        throw Exception('No token found');
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/delete_post.php'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'token': token,
+          'post_id': postId,
+        }),
+      );
+
+      print('🔍 Delete Post Response Status: ${response.statusCode}');
+      print('🔍 Delete Post Response Body: ${response.body}');
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return data;
+      } else {
+        print('❌ Delete post failed with status: ${response.statusCode}');
+        print('❌ Error message: ${data['message']}');
+        throw Exception(data['message'] ?? 'Delete post failed');
+      }
+    } catch (e) {
+      print('❌ Delete post error: $e');
+      throw Exception('Network error: $e');
+    }
+  }
+
   // Test upload configuration
   static Future<Map<String, dynamic>> testUploadConfig() async {
     try {

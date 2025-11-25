@@ -218,13 +218,56 @@ class PHPChatService {
         if (data['success'] == true) {
           final messagesList = <ChatMessage>[];
           for (var msgData in data['messages']) {
+            // Parse timestamp and handle timezone correctly
+            DateTime timestamp;
+            try {
+              final timestampStr = msgData['timestamp'].toString();
+              if (timestampStr.endsWith('Z') || timestampStr.contains('+') || timestampStr.contains('-', 10)) {
+                // Has timezone info, parse as UTC and convert to local
+                timestamp = DateTime.parse(timestampStr).toLocal();
+              } else {
+                // No timezone info, parse and check if needs conversion
+                timestamp = DateTime.parse(timestampStr);
+                // If the timestamp seems to be in UTC (more than 5 hours difference), convert to local
+                final now = DateTime.now();
+                final testDiff = now.difference(timestamp);
+                if (testDiff.inHours.abs() > 5 && testDiff.isNegative == false) {
+                  // Likely UTC, try to convert
+                  try {
+                    timestamp = DateTime.parse(timestampStr + 'Z').toLocal();
+                  } catch (e) {
+                    // Keep original if conversion fails
+                  }
+                }
+              }
+            } catch (e) {
+              print('❌ Error parsing timestamp: ${msgData['timestamp']} - $e');
+              timestamp = DateTime.now();
+            }
+            
+            // Parse seen_at timestamp if available
+            DateTime? seenAt;
+            if (msgData['seen_at'] != null) {
+              try {
+                final seenAtStr = msgData['seen_at'].toString();
+                if (seenAtStr.endsWith('Z') || seenAtStr.contains('+') || seenAtStr.contains('-', 10)) {
+                  seenAt = DateTime.parse(seenAtStr).toLocal();
+                } else {
+                  seenAt = DateTime.parse(seenAtStr);
+                }
+              } catch (e) {
+                print('❌ Error parsing seen_at: ${msgData['seen_at']} - $e');
+                seenAt = null;
+              }
+            }
+            
             messagesList.add(ChatMessage(
               id: msgData['id'],
               roomId: roomId,
               senderId: msgData['sender_id'].toString(),
               message: msgData['message'],
               replyTo: msgData['reply_to'],
-              timestamp: DateTime.parse(msgData['timestamp']),
+              timestamp: timestamp,
               type: MessageType.values.firstWhere(
                 (e) => e.toString().split('.').last == (msgData['type'] ?? 'text'),
                 orElse: () => MessageType.text,
@@ -234,7 +277,7 @@ class PHPChatService {
                 'sender_photo': msgData['sender_photo'],
               },
               isSeen: _parseBoolean(msgData['is_seen']),
-              seenAt: msgData['seen_at'] != null ? DateTime.parse(msgData['seen_at']) : null,
+              seenAt: seenAt,
             ));
           }
           

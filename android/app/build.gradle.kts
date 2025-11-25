@@ -34,8 +34,9 @@ android {
         applicationId = "com.codify.mysgram"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 8
+        versionCode = 9
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -58,4 +59,5 @@ flutter {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     implementation("com.google.android.gms:play-services-auth:21.2.0")
+    implementation("androidx.multidex:multidex:2.0.1")
 }

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get/get.dart';
 
 class GiftService {
   // Temporarily using working backend - change back to https://mysgram.com when accessible
@@ -72,11 +74,32 @@ class GiftService {
   // Get user's coin balance
   static Future<int> getUserCoins() async {
     try {
-      // Simulate API call
-      await Future.delayed(Duration(milliseconds: 200));
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
       
-      // For demo purposes, return a default amount
-      return 1000;
+      if (token == null) {
+        print('❌ No auth token found');
+        return 0;
+      }
+      
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/get_coins.php'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          print('✅ User coins: ${data['coins']}');
+          return int.parse(data['coins'].toString());
+        }
+      }
+      
+      print('❌ Failed to get user coins: ${response.statusCode}');
+      return 0;
     } catch (e) {
       print('❌ Error getting user coins: $e');
       return 0;
@@ -102,12 +125,17 @@ class GiftService {
       // Find gift details
       GiftItem? giftItem;
       for (var category in giftCategories) {
-        giftItem = category.gifts.firstWhere((gift) => gift.id == giftId);
-        if (giftItem != null) break;
+        try {
+          giftItem = category.gifts.firstWhere((gift) => gift.id == giftId);
+          if (giftItem != null) break;
+        } catch (e) {
+          continue;
+        }
       }
       
       if (giftItem == null) {
         print('❌ Gift not found: $giftId');
+        Get.snackbar('Error', 'Gift not found', backgroundColor: Colors.red, colorText: Colors.white);
         return false;
       }
       
@@ -117,17 +145,59 @@ class GiftService {
       final userCoins = await getUserCoins();
       if (userCoins < totalCost) {
         print('❌ Insufficient coins. Required: $totalCost, Available: $userCoins');
+        Get.snackbar(
+          'Insufficient Coins',
+          'You need $totalCost coins but only have $userCoins coins',
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+        );
         return false;
       }
       
-      // Simulate sending gift
-      print('🎁 Simulating gift send: ${giftItem.name} to user $recipientId');
-      await Future.delayed(Duration(seconds: 1));
+      // Get auth token
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
       
-      print('✅ Gift sent successfully');
-      return true;
+      if (token == null) {
+        print('❌ No auth token found');
+        Get.snackbar('Error', 'Please login first', backgroundColor: Colors.red, colorText: Colors.white);
+        return false;
+      }
+      
+      // Send gift via backend API
+      final response = await http.post(
+        Uri.parse('$baseUrl/chat/send_gift.php'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'recipient_id': recipientId,
+          'gift_id': giftId,
+          'quantity': quantity,
+          'message': '',
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          print('✅ Gift sent successfully: ${giftItem.name} to user $recipientId');
+          return true;
+        } else {
+          print('❌ Gift send failed: ${data['error'] ?? data['message']}');
+          Get.snackbar('Error', data['error'] ?? data['message'] ?? 'Failed to send gift', 
+            backgroundColor: Colors.red, colorText: Colors.white);
+          return false;
+        }
+      } else {
+        print('❌ Gift send failed: ${response.statusCode}');
+        Get.snackbar('Error', 'Failed to send gift', backgroundColor: Colors.red, colorText: Colors.white);
+        return false;
+      }
     } catch (e) {
       print('❌ Error sending gift: $e');
+      Get.snackbar('Error', 'Failed to send gift: $e', backgroundColor: Colors.red, colorText: Colors.white);
       return false;
     }
   }

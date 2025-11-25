@@ -211,21 +211,51 @@ class StoriesController extends GetxController {
 
   String _getTimeAgo(String createdAt) {
     try {
-      final created = DateTime.parse(createdAt);
+      if (createdAt.isEmpty) return 'now';
+      
+      // Parse the date string - handle both UTC and local time
+      DateTime created;
+      if (createdAt.endsWith('Z') || createdAt.contains('+') || createdAt.contains('-', 10)) {
+        // Has timezone info, parse as UTC and convert to local
+        created = DateTime.parse(createdAt).toLocal();
+      } else {
+        // No timezone info, assume it's already in local time or parse as local
+        created = DateTime.parse(createdAt);
+        // If parsed date seems to be in UTC (more than 5 hours difference), convert to local
+        final now = DateTime.now();
+        final testDiff = now.difference(created);
+        if (testDiff.inHours.abs() > 5 && testDiff.isNegative == false) {
+          // Likely UTC, try to convert
+          try {
+            created = DateTime.parse(createdAt + 'Z').toLocal();
+          } catch (e) {
+            // Keep original if conversion fails
+          }
+        }
+      }
+      
       final now = DateTime.now();
       final difference = now.difference(created);
       
+      // Handle negative differences (future timestamps) - show as "now"
+      if (difference.isNegative) {
+        return 'now';
+      }
+      
       if (difference.inDays > 0) {
-        return '${difference.inDays}d';
+        return '${difference.inDays}d ago';
       } else if (difference.inHours > 0) {
-        return '${difference.inHours}h';
+        return '${difference.inHours}h ago';
       } else if (difference.inMinutes > 0) {
-        return '${difference.inMinutes}m';
+        return '${difference.inMinutes}m ago';
+      } else if (difference.inSeconds > 10) {
+        return '${difference.inSeconds}s ago';
       } else {
         return 'now';
       }
     } catch (e) {
-      return '2h'; // Default fallback
+      print('❌ Error parsing time: $createdAt - $e');
+      return 'now';
     }
   }
 

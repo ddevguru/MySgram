@@ -1184,12 +1184,37 @@ class _PostDetailPageState extends State<PostDetailPage> {
   }
 
   String _formatTimestamp(String? timestamp) {
-    if (timestamp == null) return '';
+    if (timestamp == null || timestamp.isEmpty) return '';
     
     try {
-      final date = DateTime.parse(timestamp);
+      // Parse the date string - handle both UTC and local time
+      DateTime date;
+      if (timestamp.endsWith('Z') || timestamp.contains('+') || timestamp.contains('-', 10)) {
+        // Has timezone info, parse as UTC and convert to local
+        date = DateTime.parse(timestamp).toLocal();
+      } else {
+        // No timezone info, assume it's already in local time or parse as local
+        date = DateTime.parse(timestamp);
+        // If parsed date seems to be in UTC (more than 5 hours difference), convert to local
+        final now = DateTime.now();
+        final testDiff = now.difference(date);
+        if (testDiff.inHours.abs() > 5 && testDiff.isNegative == false) {
+          // Likely UTC, try to convert
+          try {
+            date = DateTime.parse(timestamp + 'Z').toLocal();
+          } catch (e) {
+            // Keep original if conversion fails
+          }
+        }
+      }
+      
       final now = DateTime.now();
       final difference = now.difference(date);
+      
+      // Handle negative differences (future timestamps) - show as "Just now"
+      if (difference.isNegative) {
+        return 'Just now';
+      }
       
       if (difference.inDays > 0) {
         return '${difference.inDays}d ago';
@@ -1197,10 +1222,13 @@ class _PostDetailPageState extends State<PostDetailPage> {
         return '${difference.inHours}h ago';
       } else if (difference.inMinutes > 0) {
         return '${difference.inMinutes}m ago';
+      } else if (difference.inSeconds > 10) {
+        return '${difference.inSeconds}s ago';
       } else {
         return 'Just now';
       }
     } catch (e) {
+      print('❌ Error parsing timestamp: $timestamp - $e');
       return '';
     }
   }
